@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <immintrin.h>
 
@@ -44,7 +45,7 @@ leak(size_t address, char * buffer) {
     flush_from_cache(&buffer[j * kPageSize]);
   }
 
-  int status;
+  unsigned int status;
   if ((status = _xbegin()) == _XBEGIN_STARTED) {
     asm __volatile__ (
       "retry%=:                           \n"
@@ -151,7 +152,7 @@ main(int argc, char* argv[]) {
   if (argc != 3) {
     // leak our own usage message
     for (size_t i = 0; i < size; ++i) {
-      std::cerr << probe_byte(begin + i, probe_memory.data());
+      std::cerr << sample_byte(begin + i, probe_memory.data());
     }
     return EXIT_FAILURE;
   }
